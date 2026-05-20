@@ -4,9 +4,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Optional
 
 from src.agent import AgentRegistry, AgentStatus
+from src.approval.service import ApprovalService, ApprovalError
 
 router = APIRouter()
 registry = AgentRegistry()
+approval_service = ApprovalService(registry=registry)
 
 
 @router.get("/agents")
@@ -53,6 +55,21 @@ async def stop_agent(agent_id: str):
 @router.get("/agents/count")
 async def agent_count():
     return {"count": registry.count()}
+
+
+@router.post("/agents/{agent_id}/approve/{step_id}")
+async def approve_human_step(agent_id: str, step_id: str):
+    """Approve a human-in-the-loop workflow step for a given agent.
+
+    The run-state guard is applied in the shared ApprovalService before
+    any lookup or mutation. Returns a deterministic 4xx response when
+    the agent is not in an approvable state.
+    """
+    try:
+        result = approval_service.approve_step(agent_id, step_id)
+        return result
+    except ApprovalError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
 # 2019-03-18T11:10:18 update
 
